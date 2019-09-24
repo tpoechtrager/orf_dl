@@ -10,7 +10,7 @@ ORF Mediathek Downloader written in PHP.
 
 Optional: `ffmpeg`.
 
-FFmpeg is required if you want to the tool to convert your downloaded
+FFmpeg is required if you want the tool to convert your downloaded  
 videos into an mp4-container without re-encoding.
 
 ### Usage ###
