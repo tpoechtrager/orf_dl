@@ -22,8 +22,9 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.      *
  ***********************************************************************/
 
-$curl = curl_init();
+$is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
 
+$curl = curl_init();
 $user_agent = NULL;
 // "Mozilla/5.0 (X11; Linux x86_64; rv:69.0) Gecko/20100101 Firefox/69.0";
 
@@ -105,7 +106,7 @@ function check_filename($filename)
 
 function http_request($url, $write_callback = NULL)
 {
-    global $user_agent, $curl;
+    global $curl, $user_agent, $is_windows;
 
     $curl_opts = [
         CURLOPT_FOLLOWLOCATION => 1,
@@ -118,17 +119,29 @@ function http_request($url, $write_callback = NULL)
     if ($write_callback) $curl_opts[CURLOPT_WRITEFUNCTION] = $write_callback;
     else $curl_opts[CURLOPT_RETURNTRANSFER] = 1;
 
+    if ($is_windows)
+        $curl_opts[CURLOPT_CAINFO] = "php/extras/cacert.pem";
+
     curl_setopt_array($curl, $curl_opts);
 
     $resp = curl_exec($curl);
+
+    if ($resp === FALSE)
+        return err(__LINE__, "HTTP Request failed: '%s'", curl_error($curl));
+
     $http_status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 
-    return $http_status == 200 && $resp !== FALSE ? $resp : FALSE;
+    if ($http_status != 200)
+        return err(__LINE__, "Invalid HTTP status (%d!=200)", $http_status);
+
+    return $resp;
 }
 
 function parse_video_json($video_json)
 {
     if (!array_key_exists("sources", $video_json))
+        return err(__LINE__);
+    if (!array_key_exists("title", $video_json))
         return err(__LINE__);
 
     $video_title = $video_json["title"];
@@ -141,12 +154,33 @@ function parse_video_json($video_json)
     $video_url = null;
     $video_url_srt = null;
 
-    $bad_characters = [
-        " ", ".", "/", ":", "(", ")", "{", "}", "&", ",", "?"
+    $replace_characters = [
+        ["ß", "ss"]
     ];
 
-    foreach ($bad_characters as $bad_character)
-        $video_filename = str_replace($bad_character, "_", $video_filename);
+    $allowed_characters =
+        "abcdefghijklmonpqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".
+        "0123456789öÖäÄüÜ@&";
+
+    foreach ($replace_characters as $replace_character)
+    {
+        list($a, $b) = $replace_character;
+        $video_filename = str_replace($a, $b, $video_filename);
+    }
+
+    $video_filename = str_split($video_filename);
+
+    foreach ($video_filename as &$char_a)
+    {
+        for ($j = 0; $j < strlen($allowed_characters); ++$j)
+        {
+            $char_b = $allowed_characters[$j];
+            if ($char_a == $char_b) continue 2;
+        }
+        $char_a = "_";
+    }
+
+    $video_filename = implode("", $video_filename);
 
     if ($video_filename > 100)
         $video_filename = substr($video_filename, 0, 100);
@@ -219,7 +253,7 @@ function get_video_urls($url)
     $json_string = strstr($resp, '<div class="jsb_ jsb_VideoPlaylist" data-jsb="');
 
     if (!$json_string)
-        return err(__LINE__);
+        return err(__LINE__, "Could not find JSON data. Video no longer available?");
 
     $json_string = explode('">', $json_string);
     $json_string = explode('data-jsb="', $json_string[0]);
@@ -375,7 +409,7 @@ function download_video($video)
             return $data_length;
         });
 
-        if ($resp == FALSE)
+        if ($resp === FALSE)
         {
             $error = true;
             break;
@@ -465,42 +499,57 @@ function download_videos($url)
         if ($video_filename === FALSE)
             return err(__LINE__);
 
-        if ($video_filename !== FALSE)
+        printf("\nDownloaded: $video_filename\n");
+
+        if (convert_ts_to_mp4_container($video_filename, $video_srt_filename))
         {
-            printf("\nDownloaded: $video_filename\n");
+            printf("\nRemoving: '%s'\n", $video_filename);
+            unlink($video_filename);
 
-            if (convert_ts_to_mp4_container($video_filename, $video_srt_filename))
+            if ($video_srt_filename)
             {
-                printf("\nRemoving: '%s'\n", $video_filename);
-                unlink($video_filename);
-
-                if ($video_srt_filename)
-                {
-                    printf("\nRemoving: '%s'\n", $video_srt_filename);
-                    unlink($video_srt_filename);
-                }
-
-                printf("\n");
+                printf("\nRemoving: '%s'\n", $video_srt_filename);
+                unlink($video_srt_filename);
             }
-        
-            printf("\nDone.\n\n");
+
+            printf("\n");
         }
+
+        printf("\nDone.\n\n");
     }
 
     return TRUE;
 }
 
-if ($argc < 2)
-{
-    fprintf(STDERR, "Usage: php %s <ORF Mediathek URL>\n", $argv[0]);
-    exit(1);
-}
-
+$tvthek_urls = [];
 $error = false;
 
-if (download_videos($argv[1]) === FALSE)
+if ($is_windows)
 {
-    $error = true;
+    $tvthek_urls[] = readline("ORF Mediathek URL: ");
+    printf("\n");
+}
+else
+{
+    if ($argc < 2)
+    {
+        fprintf(STDERR, "Usage: php %s <ORF Mediathek URL> [...]\n", $argv[0]);
+        exit(1);
+    }
+
+    $error = false;
+
+    for ($i = 1; $i < $argc; ++$i)
+        $tvthek_urls[] = $argv[$i];
+}
+
+foreach ($tvthek_urls as $tvthek_url)
+{
+    if (download_videos($tvthek_url) === FALSE)
+    {
+        $error = true;
+        break;
+    }
 }
 
 curl_close($curl);

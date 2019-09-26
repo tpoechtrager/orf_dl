@@ -13,9 +13,21 @@ Optional: `ffmpeg`.
 FFmpeg is required if you want the tool to convert your downloaded  
 videos into an mp4-container without re-encoding.
 
+### Builds ###
+
+**Windows:** https://drive.google.com/drive/folders/14C1Vu5AabsUmYoZhwn8zTxpsrTZ39JHj?usp=sharing
+
 ### Usage ###
 
-`php orf_dl.php <ORF Mediathek URL>`
+**Windows:**
+
+Run the `orf_dl` batch file. You will be prompted for a URL.
+
+**Other OSs:**
+
+`php orf_dl.php <ORF Mediathek URL> [...]`
+
+Example Output:
 
     $ php orf_dl.php https://tvthek.orf.at/profile/ZIB-700/12288226/ZIB-700/14026786
     Downloading 'ZIB_7_00' ...
