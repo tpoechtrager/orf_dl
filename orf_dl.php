@@ -40,6 +40,22 @@ function err($line, ...$msg)
     return FALSE;
 }
 
+function check_array_key(&$array, ...$keys)
+{
+    foreach ($keys as $key)
+    {
+        if (!array_key_exists($key, $array))
+        {
+            if (count($keys) > 1)
+                return err(__LINE__, "Array key '%s' does not exist", $key);
+
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 function get_milli_seconds()
 {
     $microtime = microtime();
@@ -139,14 +155,15 @@ function http_request($url, $write_callback = NULL)
 
 function parse_video_json($video_json)
 {
-    if (!array_key_exists("sources", $video_json))
+    if (!check_array_key($video_json, "sources", "id", "episode_id", "title"))
         return err(__LINE__);
-    if (!array_key_exists("title", $video_json))
-        return err(__LINE__);
+
+    $video_id = $video_json["id"];
+    $video_episode_id = $video_json["episode_id"];
 
     $video_title = $video_json["title"];
     $video_sources = $video_json["sources"];
-    $video_subtitles = array_key_exists("subtitles", $video_json) ? 
+    $video_subtitles = check_array_key($video_json, "subtitles") ? 
                        $video_json["subtitles"] : [];
     $video_urls = [];
 
@@ -187,13 +204,7 @@ function parse_video_json($video_json)
 
     foreach ($video_sources as $video_source)
     {
-        if (!array_key_exists("type", $video_source))
-            return err(__LINE__);
-        if (!array_key_exists("delivery", $video_source))
-            return err(__LINE__);
-        if (!array_key_exists("quality", $video_source))
-            return err(__LINE__);
-        if (!array_key_exists("src", $video_source))
+        if (!check_array_key($video_source, "type", "delivery", "quality", "src"))
             return err(__LINE__);
 
         if ($video_source["type"] != "application/x-mpegURL")
@@ -207,9 +218,7 @@ function parse_video_json($video_json)
 
     foreach ($video_subtitles as $video_subtitle)
     {
-        if (!array_key_exists("type", $video_subtitle))
-            return err(__LINE__);
-        if (!array_key_exists("src", $video_subtitle))
+        if (!check_array_key($video_subtitle, "type", "src"))
             return err(__LINE__);
 
         if ($video_subtitle["type"] != "srt")
@@ -218,11 +227,11 @@ function parse_video_json($video_json)
         $video_url_srt = $video_subtitle["src"];
     }
 
-    if (array_key_exists("Q8C", $video_urls)) // HD
+    if (check_array_key($video_urls, "Q8C")) // HD
         $video_url = $video_urls["Q8C"];
-    else if (array_key_exists("Q6A", $video_urls)) // Medium
+    else if (check_array_key($video_urls, "Q6A")) // Medium
         $video_url = $video_urls["Q6A"];
-    else if (array_key_exists("Q4A", $video_urls)) // Low
+    else if (check_array_key($video_urls, "Q4A")) // Low
         $video_url = $video_urls["Q4A"];
 
     if (!$video_url)
@@ -236,19 +245,21 @@ function parse_video_json($video_json)
         return err(__LINE__, "Video URL '%s' does not end with '.mp4'", $video_url);
 
     return array(
-        "title" => $video_title,
-        "filename" => $video_filename,
-        "url" => $video_url,
-        "url_srt" => $video_url_srt
+        "id"         => $video_id,
+        "episode_id" => $video_episode_id,
+        "title"      => $video_title,
+        "filename"   => $video_filename,
+        "url"        => $video_url,
+        "url_srt"    => $video_url_srt
     );
 }
 
-function get_video_urls($url)
+function get_video_urls($url, $wanted_video_id = -1)
 {
     $resp = http_request($url);
 
     if ($resp === FALSE)
-        return err(__LINE__, "HTTP request failed (invalid video URL?)");
+        return err(__LINE__, "Invalid video URL?");
 
     $json_string = strstr($resp, '<div class="jsb_ jsb_VideoPlaylist" data-jsb="');
 
@@ -264,13 +275,13 @@ function get_video_urls($url)
     if (!$video_json)
         return err(__LINE__, "Could not decode json data:\n%s\n\n", $json_string);
 
-    if (!array_key_exists("playlist", $video_json))
+    if (!check_array_key($video_json, "playlist"))
         return err(__LINE__);
 
     $video_json_playlist = $video_json["playlist"];
     $videos_json = [];
 
-    if (array_key_exists("gapless_video", $video_json_playlist))
+    if (check_array_key($video_json_playlist, "gapless_video"))
     {
         $video_json = $video_json_playlist["gapless_video"];
         $video_json["title"] = $video_json_playlist["title"];
@@ -278,7 +289,7 @@ function get_video_urls($url)
     }
     else
     {
-        if (!array_key_exists("videos", $video_json_playlist))
+        if (!check_array_key($video_json_playlist, "videos"))
             return err(__LINE__);
 
         $videos_json = $video_json_playlist["videos"];
@@ -293,10 +304,13 @@ function get_video_urls($url)
         if ($video === FALSE)
             return err(__LINE__);
 
+        if ($wanted_video_id != -1 && $video["id"] != $wanted_video_id)
+            continue;
+
         $videos[] = $video;
     }
 
-    return $videos;
+    return empty($videos) ? FALSE : $videos;
 }
 
 function get_chunk_urls($url)
@@ -358,7 +372,10 @@ function download_srt($video)
     $length = strlen($resp);
 
     if (fwrite($fh, $resp, $length) != $length)
+    {
+        fclose($fh);
         return err(__LINE__);
+    }
 
     fclose($fh);
     return $filename;
@@ -472,12 +489,43 @@ function convert_ts_to_mp4_container($video_filename, $video_srt_filename)
     return $return_code == 0;
 }
 
-function download_videos($url)
+function download_videos($tvthek_urls)
 {
-    $videos = get_video_urls($url);
+    $videos = [];
 
-    if ($videos === FALSE)
-        return err(__LINE__);
+    foreach ($tvthek_urls as $tvthek_url)
+    {
+         // Store the id as a string. 32-bit PHP...
+        $wanted_video_id = "-1";
+
+        if (sscanf($tvthek_url, "%[^:]://tvthek.orf.at/profile/%s", $dummy, $dummy) != 2)
+            return err(__LINE__, "Invalid URL '%s'", $tvthek_url);
+
+        sscanf($tvthek_url,
+               "%[^:]://tvthek.orf.at/profile/%[^/]/%d/%[^/]/%d/%[^/]/%s",
+               $dummy, $dummy, $dummy, $dummy, $dummy, $dummy, $wanted_video_id);
+
+        if (count($tvthek_urls) > 1)
+            printf("Processing '%s' ...\n", $tvthek_url);
+
+        $videos_tmp = get_video_urls($tvthek_url, $wanted_video_id);
+
+        if ($videos_tmp === FALSE)
+            return err(__LINE__);
+
+        foreach ($videos_tmp as $video)
+            $videos[] = $video;
+    }
+
+    if (count($videos) > 1)
+    {
+        printf("Videos to download:\n\n");
+
+        foreach ($videos as $video)
+            printf("  '%s'\n", $video["filename"]);
+
+        printf("\n");
+    }
 
     foreach ($videos as $video)
     {
@@ -508,14 +556,14 @@ function download_videos($url)
 
             if ($video_srt_filename)
             {
-                printf("\nRemoving: '%s'\n", $video_srt_filename);
+                printf("Removing: '%s'\n", $video_srt_filename);
                 unlink($video_srt_filename);
             }
 
             printf("\n");
         }
 
-        printf("\nDone.\n\n");
+        printf("Done.\n\n");
     }
 
     return TRUE;
@@ -524,33 +572,21 @@ function download_videos($url)
 $tvthek_urls = [];
 $error = false;
 
-if ($is_windows)
+if ($argc < 2)
 {
     $tvthek_urls[] = readline("ORF Mediathek URL: ");
     printf("\n");
 }
 else
 {
-    if ($argc < 2)
-    {
-        fprintf(STDERR, "Usage: php %s <ORF Mediathek URL> [...]\n", $argv[0]);
-        exit(1);
-    }
-
     $error = false;
 
     for ($i = 1; $i < $argc; ++$i)
         $tvthek_urls[] = $argv[$i];
 }
 
-foreach ($tvthek_urls as $tvthek_url)
-{
-    if (download_videos($tvthek_url) === FALSE)
-    {
-        $error = true;
-        break;
-    }
-}
+if (download_videos($tvthek_urls) === FALSE)
+    $error = true;
 
 curl_close($curl);
 
