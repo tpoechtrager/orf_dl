@@ -155,11 +155,17 @@ function http_request($url, $write_callback = NULL)
 
 function parse_video_json($video_json)
 {
-    if (!check_array_key($video_json, "sources", "id", "episode_id", "title"))
+    if (!check_array_key($video_json, "sources", "title"))
         return err(__LINE__);
 
-    $video_id = $video_json["id"];
-    $video_episode_id = $video_json["episode_id"];
+    $video_id = -1;
+    $video_episode_id = -1;
+
+    if (check_array_key($video_json, "id"))
+        $video_id = $video_json["id"];
+
+    if (check_array_key($video_json, "episode_id"))
+        $video_episode_id = $video_json["episode_id"];
 
     $video_title = $video_json["title"];
     $video_sources = $video_json["sources"];
