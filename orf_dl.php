@@ -28,6 +28,36 @@ $curl = curl_init();
 $user_agent = NULL;
 // "Mozilla/5.0 (X11; Linux x86_64; rv:69.0) Gecko/20100101 Firefox/69.0";
 
+function print_err_code($line)
+{
+    $src = file_get_contents(__FILE__);
+
+    if ($src === FALSE)
+        return;
+
+    $src = explode("\n", $src);
+    $src_line_count = count($src);
+
+    $start = ($line - 1) - 5;
+    $end = $line + 5;
+
+    if ($start < 0)
+        $start = 0;
+
+    if ($end >= $src_line_count)
+        $end = $src_line_count - 1;
+
+
+    for ($i = $start; $i < $end; ++$i)
+    {
+        $current_line = $i + 1;
+
+        fprintf(STDERR, "%d: %s%s\n",
+                        $current_line, $src[$i],
+                        $current_line == $line ? "          <----" : "");
+    }
+}
+
 function err($line, ...$msg)
 {
     fprintf(STDERR, "Error on line: %d", $line);
@@ -37,6 +67,9 @@ function err($line, ...$msg)
         vfprintf(STDERR, " (".$msg_fmt.")", $msg);
     }
     fprintf(STDERR, "\n");
+    echo "\n";
+    print_err_code($line);
+    echo "\n";
     return FALSE;
 }
 
@@ -173,7 +206,7 @@ function parse_video_json($video_json)
                        $video_json["subtitles"] : [];
     $video_urls = [];
 
-    $video_filename = $video_title;
+    $video_filename = strftime("%Y_%m_%d_").$video_title;
     $video_url = null;
     $video_url_srt = null;
 
@@ -501,8 +534,7 @@ function download_videos($tvthek_urls)
 
     foreach ($tvthek_urls as $tvthek_url)
     {
-         // Store the id as a string. 32-bit PHP...
-        $wanted_video_id = "-1";
+        $wanted_video_id = -1;
 
         if (sscanf($tvthek_url, "%[^:]://tvthek.orf.at/profile/%s", $dummy, $dummy) != 2)
             return err(__LINE__, "Invalid URL '%s'", $tvthek_url);
@@ -538,7 +570,7 @@ function download_videos($tvthek_urls)
         $video_srt_filename = null;
         $video_filename = null;
 
-        printf("Downloading '%s' ...\n\n", $video["filename"]);
+        printf("Downloading '%s' ...\n\n", $video["title"]);
 
         if ($video["url_srt"])
         {
