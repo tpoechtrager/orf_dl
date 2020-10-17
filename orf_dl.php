@@ -25,8 +25,8 @@
 $is_windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
 
 $curl = curl_init();
-$user_agent = NULL;
-// "Mozilla/5.0 (X11; Linux x86_64; rv:69.0) Gecko/20100101 Firefox/69.0";
+$user_agent = "";
+// "Mozilla/5.0 (X11; Linux x86_64; rv:81.0) Gecko/20100101 Firefox/81.0";
 
 function print_err_code($line)
 {
@@ -246,7 +246,8 @@ function parse_video_json($video_json)
         if (!check_array_key($video_source, "type", "delivery", "quality", "src"))
             return err(__LINE__);
 
-        if ($video_source["type"] != "application/x-mpegURL")
+        if ($video_source["type"] != "application/x-mpegURL" &&
+            $video_source["type"] != "video/mp4")
             continue;
 
         if ($video_source["delivery"] != "hls")
