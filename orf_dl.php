@@ -134,9 +134,12 @@ function seconds_to_human_readable($seconds)
     return sprintf("%02d%s %02d%s", $minutes, "m", $seconds, "s");
 }
 
-function str_ends_with($str, $test)
+if (!function_exists("str_ends_with"))
 {
-    return substr_compare($str, $test, -strlen($test)) === 0;
+    function str_ends_with($str, $test)
+    {
+        return substr_compare($str, $test, -strlen($test)) === 0;
+    }
 }
 
 function b_to_mb($b)
