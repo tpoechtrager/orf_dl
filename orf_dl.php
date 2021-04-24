@@ -100,7 +100,7 @@ class duration
 {
     var $start_;
     var $end_;
-    
+
     function start()
     {
         $this->start_ = get_milli_seconds();
@@ -117,7 +117,7 @@ class duration
         if (!$this->end_) return get_milli_seconds() - $this->start_;
         return $this->end_ - $this->start_;
     }
-    
+
     function __construct()
     {
         $this->start_ = 0;
@@ -205,7 +205,7 @@ function parse_video_json($video_json)
 
     $video_title = $video_json["title"];
     $video_sources = $video_json["sources"];
-    $video_subtitles = check_array_key($video_json, "subtitles") ? 
+    $video_subtitles = check_array_key($video_json, "subtitles") ?
                        $video_json["subtitles"] : [];
     $video_urls = [];
 
@@ -219,7 +219,7 @@ function parse_video_json($video_json)
 
     $allowed_characters =
         "abcdefghijklmonpqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".
-        "0123456789öÖäÄüÜ@&";
+        "0123456789öÖäÄüÜ@";
 
     foreach ($replace_characters as $replace_character)
     {
