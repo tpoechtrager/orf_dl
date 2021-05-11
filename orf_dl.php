@@ -214,12 +214,18 @@ function parse_video_json($video_json)
     $video_url_srt = null;
 
     $replace_characters = [
-        ["ß", "ss"]
+        ["ß", "ss"],
+        ["ö", "oe"],
+        ["Ö", "Oe"],
+        ["ä", "ae"],
+        ["Ä", "Ae"],
+        ["ü", "ue"],
+        ["Ü", "Ue"]
     ];
 
     $allowed_characters =
         "abcdefghijklmonpqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".
-        "0123456789öÖäÄüÜ@";
+        "0123456789";
 
     foreach ($replace_characters as $replace_character)
     {
